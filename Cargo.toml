@@ -1,5 +1,5 @@
 [package]
-name = "ComposeHook"
+name = "composehook"
 authors = ["tippfehlr"]
 license = "MIT"
 version = "0.1.0"
