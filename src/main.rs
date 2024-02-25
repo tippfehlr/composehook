@@ -39,10 +39,7 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
         ])
         .output()
     {
-        Ok(output) => {
-            println!("{:#?}", String::from_utf8_lossy(&output.stdout));
-            String::from_utf8_lossy(&output.stdout).trim() == "'true'"
-        }
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "'true'",
         Err(e) => {
             eprintln!("{:#?}", e);
             return HttpResponse::InternalServerError();
