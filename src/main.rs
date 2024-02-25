@@ -1,9 +1,14 @@
-use std::{collections::HashMap, path::Path, process::Command, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::Path,
+    process::Command,
+    sync::{Arc, Mutex},
+};
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 
 struct State {
-    currently_updating: Mutex<HashMap<String, bool>>,
+    currently_updating: Arc<Mutex<HashMap<String, bool>>>,
 }
 
 async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> impl Responder {
@@ -29,7 +34,6 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
             .unwrap()
             .remove(&format!("{}/{}", &project, &service));
     };
-
     println!("Received update request for {}/{}", &project, &service);
 
     let container_id = match Command::new("docker")
@@ -115,12 +119,14 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let currently_updating = Arc::new(Mutex::new(HashMap::<String, bool>::new()));
+
     HttpServer::new(move || {
         App::new()
             .route("/{project}/{container}", web::get().to(webhook))
             .route("/{project}/{container}", web::post().to(webhook))
             .app_data(web::Data::new(State {
-                currently_updating: Mutex::new(HashMap::new()),
+                currently_updating: currently_updating.clone(),
             }))
     })
     .bind(("0.0.0.0", 8537))?
