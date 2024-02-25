@@ -1,10 +1,38 @@
-use std::{path::Path, process::Command};
+use std::{collections::HashMap, path::Path, process::Command, sync::Mutex};
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 
-async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
+struct State {
+    currently_updating: Mutex<HashMap<String, bool>>,
+}
+
+async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> impl Responder {
     let (project, service) = path.into_inner();
     let path = Path::new("/compose/").join(&project);
+
+    if state
+        .currently_updating
+        .lock()
+        .unwrap()
+        .contains_key(&service)
+    {
+        eprintln!("Already updating {}/{}", &project, &service);
+        return HttpResponse::Conflict();
+    }
+
+    state
+        .currently_updating
+        .lock()
+        .unwrap()
+        .insert(format!("{}/{}", &project, &service), true);
+
+    let set_updating_false = || {
+        state
+            .currently_updating
+            .lock()
+            .unwrap()
+            .remove(&format!("{}/{}", &project, &service));
+    };
 
     println!("Received update request for {}/{}", &project, &service);
 
@@ -21,11 +49,13 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
                     .to_string()
             } else {
                 eprintln!("service not found");
+                set_updating_false();
                 return HttpResponse::NotFound();
             }
         }
         Err(_) => {
             eprintln!("project not found");
+            set_updating_false();
             return HttpResponse::NotFound();
         }
     };
@@ -42,12 +72,14 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
         Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "'true'",
         Err(e) => {
             eprintln!("{:#?}", e);
+            set_updating_false();
             return HttpResponse::InternalServerError();
         }
     };
 
     if !label_webhooks_update {
         eprintln!("label composehook.update not set to true");
+        set_updating_false();
         return HttpResponse::BadRequest();
     }
 
@@ -67,16 +99,19 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
             {
                 Ok(_) => {
                     println!("successfully updated!");
+                    set_updating_false();
                     HttpResponse::Ok()
                 }
                 Err(e) => {
                     eprintln!("{:#?}", e);
+                    set_updating_false();
                     HttpResponse::InternalServerError()
                 }
             }
         }
         Err(e) => {
             eprintln!("{:#?}", e);
+            set_updating_false();
             HttpResponse::InternalServerError()
         }
     }
@@ -88,6 +123,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .route("/{project}/{container}", web::get().to(webhook))
             .route("/{project}/{container}", web::post().to(webhook))
+            .app_data(web::Data::new(State {
+                currently_updating: HashMap::new(),
+            }))
     })
     .bind(("0.0.0.0", 8537))?
     .run()
