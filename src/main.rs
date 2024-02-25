@@ -124,7 +124,7 @@ async fn main() -> std::io::Result<()> {
             .route("/{project}/{container}", web::get().to(webhook))
             .route("/{project}/{container}", web::post().to(webhook))
             .app_data(web::Data::new(State {
-                currently_updating: HashMap::new(),
+                currently_updating: Mutex::new(HashMap::new()),
             }))
     })
     .bind(("0.0.0.0", 8537))?
