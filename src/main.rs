@@ -10,21 +10,17 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
     let (project, service) = path.into_inner();
     let path = Path::new("/compose/").join(&project);
 
-    if state
+    if let Some(prev_value) = state
         .currently_updating
         .lock()
         .unwrap()
-        .contains_key(&service)
+        .insert(format!("{}/{}", &project, &service), true)
     {
-        eprintln!("Already updating {}/{}", &project, &service);
-        return HttpResponse::Conflict();
+        if prev_value {
+            eprintln!("Already updating {}/{}", &project, &service);
+            return HttpResponse::Conflict();
+        }
     }
-
-    state
-        .currently_updating
-        .lock()
-        .unwrap()
-        .insert(format!("{}/{}", &project, &service), true);
 
     let set_updating_false = || {
         state
