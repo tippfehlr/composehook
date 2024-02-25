@@ -1,8 +1,7 @@
 use std::{path::Path, process::Command};
 
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 
-#[get("/{project}/{service}")]
 async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
     let (project, service) = path.into_inner();
     let path = Path::new("/compose/").join(&project);
@@ -35,12 +34,15 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
         .args([
             "inspect",
             "--format",
-            "'{{ index .Config.Labels \"webhooks.update\"}}'",
+            "'{{ index .Config.Labels \"composehook.update\"}}'",
             &container_id,
         ])
         .output()
     {
-        Ok(output) => String::from_utf8_lossy(&output.stdout) == "true",
+        Ok(output) => {
+            println!("{:#?}", String::from_utf8_lossy(&output.stdout));
+            String::from_utf8_lossy(&output.stdout).trim() == "'true'"
+        }
         Err(e) => {
             eprintln!("{:#?}", e);
             return HttpResponse::InternalServerError();
@@ -48,7 +50,7 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
     };
 
     if !label_webhooks_update {
-        eprintln!("label webhooks.update not set to true");
+        eprintln!("label composehook.update not set to true");
         return HttpResponse::BadRequest();
     }
 
@@ -85,8 +87,12 @@ async fn webhook(path: web::Path<(String, String)>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(move || App::new().service(webhook))
-        .bind(("0.0.0.0", 9411))?
-        .run()
-        .await
+    HttpServer::new(move || {
+        App::new()
+            .route("/{project}/{container}", web::get().to(webhook))
+            .route("/{project}/{container}", web::post().to(webhook))
+    })
+    .bind(("0.0.0.0", 9411))?
+    .run()
+    .await
 }

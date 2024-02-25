@@ -28,7 +28,7 @@ COPY --from=builder /app/target/release/composehook /usr/local/bin/composehook
 
 VOLUME /compose
 # https://gist.github.com/tippfehlr/843c2d11f356d37495670b5803b714f5
-# echo "docker-label-webhooks" | sha256sum | grep -o '[1-9]' | head -n 4 | tr -d '\n'
-EXPOSE 9411
+# echo "composehook" | sha256sum | grep -o '[1-9]' | head -n 4 | tr -d '\n'
+EXPOSE 8537
 ENTRYPOINT ["/usr/local/bin/composehook"]
 
