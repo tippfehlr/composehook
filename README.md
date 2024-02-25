@@ -20,6 +20,8 @@ services:
     restart: always
 ```
 
+*[why this port?](https://gist.github.com/tippfehlr/843c2d11f356d37495670b5803b714f5)*
+
 ## Usage
 
 To enable the webhook, add the `composehook.update=true`
@@ -43,5 +45,5 @@ http://localhost:8537/<compose-project>/<service-name>
 I suggest using a reverse proxy to expose the webhook to the internet.
 I use [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy).
 
-Unfortunately, composehook can’t update itself as docker containers can’t restart themselves.
+Unfortunately composehook can’t update itself as docker containers can’t restart themselves.
 If you know a solution, please open an issue.
