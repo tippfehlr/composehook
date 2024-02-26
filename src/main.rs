@@ -6,35 +6,53 @@ use std::{
 };
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use chrono::{DateTime, Duration, Local};
 
 struct State {
-    currently_updating: Arc<Mutex<HashMap<String, bool>>>,
+    currently_updating: Arc<Mutex<HashMap<String, DateTime<Local>>>>,
 }
 
 async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> impl Responder {
     let (project, service) = path.into_inner();
     let path = Path::new("/compose/").join(&project);
 
-    if let Some(prev_value) = state
+    let project_identifier = format!("{}/{}", &project, &service);
+    eprintln!(
+        "\x1b[0;31mReceived update request for {}\x1b[0m",
+        &project_identifier
+    );
+    let mut currently_updating = state
         .currently_updating
         .lock()
-        .unwrap()
-        .insert(format!("{}/{}", &project, &service), true)
-    {
-        if prev_value {
-            eprintln!("Already updating {}/{}", &project, &service);
-            return HttpResponse::Conflict();
+        .expect("couldn’t lock currently_updating");
+    let last_update = match currently_updating.get_mut(&project_identifier) {
+        Some(last_update) => last_update,
+        None => {
+            currently_updating.insert(
+                project_identifier.clone(),
+                Local::now() - Duration::hours(10),
+            );
+            currently_updating
+                .get_mut(&project_identifier)
+                .expect("just inserted key")
         }
+    };
+
+    if Local::now().signed_duration_since(*last_update) < Duration::seconds(10) {
+        eprintln!(
+            "Last update was {} seconds ago, skipping update",
+            Local::now()
+                .signed_duration_since(*last_update)
+                .num_seconds()
+        );
+        return HttpResponse::Conflict();
+    } else {
+        *last_update = Local::now() + Duration::seconds(99999);
     }
 
-    let set_updating_false = || {
-        state
-            .currently_updating
-            .lock()
-            .unwrap()
-            .remove(&format!("{}/{}", &project, &service));
+    let mut set_updating_false = || {
+        *last_update = Local::now();
     };
-    println!("Received update request for {}/{}", &project, &service);
 
     let container_id = match Command::new("docker")
         .args(["compose", "ps", "-q", &service])
@@ -98,7 +116,7 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
                 .spawn()
             {
                 Ok(_) => {
-                    println!("successfully updated!");
+                    eprintln!("successfully updated!");
                     set_updating_false();
                     HttpResponse::Ok()
                 }
@@ -119,7 +137,7 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let currently_updating = Arc::new(Mutex::new(HashMap::<String, bool>::new()));
+    let currently_updating = Arc::new(Mutex::new(HashMap::<String, DateTime<Local>>::new()));
 
     HttpServer::new(move || {
         App::new()
