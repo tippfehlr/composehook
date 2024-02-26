@@ -10,6 +10,7 @@ use chrono::{DateTime, Duration, Local};
 
 struct State {
     currently_updating: Arc<Mutex<HashMap<String, DateTime<Local>>>>,
+    timeout: Duration,
 }
 
 async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> impl Responder {
@@ -38,7 +39,7 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
         }
     };
 
-    if Local::now().signed_duration_since(*last_update) < Duration::seconds(10) {
+    if Local::now().signed_duration_since(*last_update) < state.timeout {
         eprintln!(
             "Last update was {} seconds ago, skipping update",
             Local::now()
@@ -138,6 +139,12 @@ async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let currently_updating = Arc::new(Mutex::new(HashMap::<String, DateTime<Local>>::new()));
+    let timeout = Duration::seconds(
+        std::env::var("TIMEOUT")
+            .unwrap_or(10.to_string())
+            .parse::<i64>()
+            .unwrap_or(10),
+    );
 
     HttpServer::new(move || {
         App::new()
@@ -145,6 +152,7 @@ async fn main() -> std::io::Result<()> {
             .route("/{project}/{container}", web::post().to(webhook))
             .app_data(web::Data::new(State {
                 currently_updating: currently_updating.clone(),
+                timeout,
             }))
     })
     .bind(("0.0.0.0", 8537))?
