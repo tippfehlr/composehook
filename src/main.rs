@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use chrono::{DateTime, Duration, Local};
 
 struct State {
@@ -13,6 +13,7 @@ struct State {
     timeout: Duration,
 }
 
+#[post("/{project}/{service}")]
 async fn webhook(path: web::Path<(String, String)>, state: web::Data<State>) -> impl Responder {
     let (project, service) = path.into_inner();
     let path = Path::new("/compose/").join(&project);
@@ -147,13 +148,10 @@ async fn main() -> std::io::Result<()> {
     );
 
     HttpServer::new(move || {
-        App::new()
-            .route("/{project}/{container}", web::get().to(webhook))
-            .route("/{project}/{container}", web::post().to(webhook))
-            .app_data(web::Data::new(State {
-                currently_updating: currently_updating.clone(),
-                timeout,
-            }))
+        App::new().service(webhook).app_data(web::Data::new(State {
+            currently_updating: currently_updating.clone(),
+            timeout,
+        }))
     })
     .bind(("0.0.0.0", 8537))?
     .run()
