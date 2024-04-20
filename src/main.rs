@@ -5,12 +5,21 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use chrono::{DateTime, Duration, Local};
 
 struct State {
     currently_updating: Arc<Mutex<HashMap<String, DateTime<Local>>>>,
     timeout: Duration,
+}
+
+#[get("/")]
+async fn index() -> impl Responder {
+    HttpResponse::Ok().body(
+        "To use, send webhooks to /{project}/{service}
+
+Source code: https://github.com/tippfehlr/composehook",
+    )
 }
 
 #[post("/{project}/{service}")]
@@ -148,10 +157,13 @@ async fn main() -> std::io::Result<()> {
     );
 
     HttpServer::new(move || {
-        App::new().service(webhook).app_data(web::Data::new(State {
-            currently_updating: currently_updating.clone(),
-            timeout,
-        }))
+        App::new()
+            .service(index)
+            .service(webhook)
+            .app_data(web::Data::new(State {
+                currently_updating: currently_updating.clone(),
+                timeout,
+            }))
     })
     .bind(("0.0.0.0", 8537))?
     .run()
