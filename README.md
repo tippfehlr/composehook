@@ -1,3 +1,5 @@
+⚠️ ARCHIVED: This repo has moved to https://codeberg.org/tippfehlr/composehook
+
 # composehook
 
 Create update webhooks for containers in docker compose projects.
